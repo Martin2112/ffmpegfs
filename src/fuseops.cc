@@ -55,6 +55,7 @@
 #include <unistd.h>
 #include <map>
 #include <regex>
+#include <set>
 #include <list>
 #include <assert.h>
 #include <signal.h>
@@ -63,6 +64,11 @@
  * @brief Map source file names to virtual file objects.
  */
 typedef std::map<const std::string, VIRTUALFILE> FILENAME_MAP;
+
+/**
+ * @brief Set of extensions.
+ */
+typedef std::set<std::string> EXTENSION_SET;
 
 static void             init_stat(struct stat *stbuf, size_t fsize, time_t ftime, bool directory);
 static LPVIRTUALFILE    make_file(void *buf, fuse_fill_dir_t filler, VIRTUALTYPE type, const std::string & origpath, const std::string & filename, size_t fsize, time_t ftime = time(nullptr), int flags = VIRTUALFLAG_NONE);
@@ -88,6 +94,7 @@ static void             ffmpegfs_destroy(__attribute__((unused)) void * p);
 static std::string      get_number(const char *path, uint32_t *value);
 
 static FILENAME_MAP          filenames;          /**< @brief Map files to virtual files */
+static EXTENSION_SET        extension_set;      /**< @brief Set built from m_extensions */
 static std::vector<char>    script_file;        /**< @brief Buffer for the virtual script if enabled */
 
 static struct sigaction     oldHandler;         /**< @brief Saves old SIGINT handler to restore on shutdown */
@@ -386,7 +393,7 @@ static bool transcoded_name(std::string * filepath, FFmpegfs_Format **current_fo
         return false;
     }
 
-    if (allow_list_ext(ext, params.m_extensions))
+    if (extension_set.find(ext) != extension_set.end())
     {
         if (!params.smart_transcode())
         {
@@ -2142,6 +2149,13 @@ static void *ffmpegfs_init(struct fuse_conn_info *conn)
     if (params.m_enablescript)
     {
         prepare_script();
+    }
+
+    // Create a set of extensions so we can avoid string processing on each lookup.
+    if (!params.m_extensions.empty())
+    {
+    	std::vector<std::string> allowext = split(params.m_extensions, ",");
+    	extension_set = EXTENSION_SET(allowext.begin(), allowext.end());
     }
 
     if (tp == nullptr)
